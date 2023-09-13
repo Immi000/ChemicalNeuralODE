@@ -35,14 +35,11 @@ class Encoder(torch.nn.Module):
     def __init__(self,
                 in_features: int = 29,
                 latent_features: int = 5,
-                n_hidden: int = 4,
                 width_list: list = [32, 16, 8],
                 activation: torch.nn.Module = torch.nn.Tanh()):
         super().__init__()
-        assert n_hidden == len(width_list) + 1, "n_hidden must equal length of width_list"
         self.in_features = in_features
         self.latent_features = latent_features
-        self.n_hidden = n_hidden
         self.width_list = width_list
         self.activation = activation
 
@@ -64,14 +61,11 @@ class Decoder(torch.nn.Module):
         def __init__(self,
                     out_features: int = 29,
                     latent_features: int = 5,
-                    n_hidden: int = 4,
                     width_list: list = [32, 16, 8],
                     activation: torch.nn.Module = torch.nn.Tanh()):
             super().__init__()
-            assert n_hidden == len(width_list) + 1, "n_hidden must equal length of width_list"
             self.out_features = out_features
             self.latent_features = latent_features
-            self.n_hidden = n_hidden
             self.width_list = width_list
             self.activation = activation
             self.width_list.reverse()
@@ -96,16 +90,14 @@ class ModelWrapper(torch.nn.Module):
                  latent_vars: int = 5,
                  ode_width: int = 256,
                  ode_hidden: int = 8,
-                 coder_hidden: int = 4,
                  width_list: list = [32, 16, 8],
                  coder_activation: torch.nn.Module = torch.nn.Tanh()
                  ):
         super().__init__()
-        assert coder_hidden == len(width_list) + 1, "coder_hidden must equal length of width_list"
         self.x_vars = real_vars
         self.z_vars = latent_vars
-        self.encoder = Encoder(self.x_vars, self.z_vars, n_hidden=coder_hidden, width_list=width_list, activation=coder_activation)
-        self.decoder = Decoder(self.x_vars, self.z_vars, n_hidden=coder_hidden, width_list=width_list, activation=coder_activation)
+        self.encoder = Encoder(self.x_vars, self.z_vars, width_list=width_list, activation=coder_activation)
+        self.decoder = Decoder(self.x_vars, self.z_vars, width_list=width_list, activation=coder_activation)
         self.ode = NeuralODE(self.z_vars, self.z_vars, n_hidden=ode_hidden, layer_width=ode_width)
         self.width = ode_width
         self.hidden = ode_hidden
@@ -147,7 +139,6 @@ class LinearModelWrapper(ModelWrapper):
                          latent_vars=latent_vars,
                          ode_width=1,
                          ode_hidden=1,
-                         coder_hidden=4,
                          width_list=width_list,
                          coder_activation=coder_activation)
         self.ode = LinearODE(latent_vars)
@@ -192,7 +183,6 @@ class PolynomialModelWrapper(ModelWrapper):
                          latent_vars=latent_vars,
                          ode_width=1,
                          ode_hidden=1,
-                         coder_hidden=4,
                          width_list=width_list,
                          coder_activation=coder_activation)
         self.ode = PolynomialODE(degree, latent_vars)
