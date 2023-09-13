@@ -7,7 +7,7 @@ class NeuralODE(torch.nn.Module):
     def __init__(self,
                  input_shape: int,
                  output_shape: int,
-                 activation: torch.nn.modules.activation = torch.nn.ReLU(),
+                 activation: torch.nn.Module = torch.nn.ReLU(),
                  n_hidden: int = 8,
                  layer_width: int = 256):
         super().__init__()
@@ -37,7 +37,7 @@ class Encoder(torch.nn.Module):
                 latent_features: int = 5,
                 n_hidden: int = 4,
                 width_list: list = [32, 16, 8],
-                activation: torch.nn.modules.activation = torch.nn.Tanh()):
+                activation: torch.nn.Module = torch.nn.Tanh()):
         super().__init__()
         assert n_hidden == len(width_list) + 1, "n_hidden must equal length of width_list"
         self.in_features = in_features
@@ -66,7 +66,7 @@ class Decoder(torch.nn.Module):
                     latent_features: int = 5,
                     n_hidden: int = 4,
                     width_list: list = [32, 16, 8],
-                    activation: torch.nn.modules.activation = torch.nn.Tanh()):
+                    activation: torch.nn.Module = torch.nn.Tanh()):
             super().__init__()
             assert n_hidden == len(width_list) + 1, "n_hidden must equal length of width_list"
             self.out_features = out_features
@@ -90,6 +90,7 @@ class Decoder(torch.nn.Module):
 
 
 class ModelWrapper(torch.nn.Module):
+
     def __init__(self,
                  real_vars: int = 29,
                  latent_vars: int = 5,
@@ -97,7 +98,7 @@ class ModelWrapper(torch.nn.Module):
                  ode_hidden: int = 8,
                  coder_hidden: int = 4,
                  width_list: list = [32, 16, 8],
-                 coder_activation: torch.nn.modules.activation = torch.nn.Tanh()
+                 coder_activation: torch.nn.Module = torch.nn.Tanh()
                  ):
         super().__init__()
         assert coder_hidden == len(width_list) + 1, "coder_hidden must equal length of width_list"
@@ -113,11 +114,10 @@ class ModelWrapper(torch.nn.Module):
         self.z_pred = None
         self.x_pred = None
         self.z_dot = None
-        self.relative_error = None
 
 
-    def forward(self, x0: torch.tensor, t_range: torch.tensor) -> torch.tensor:
-        self.z_pred = torch.permute(odeint_adjoint(self.ode, self.encoder(x0), t_range, adjoint_rtol=1e-7, adjoint_atol=1e-9, adjoint_method='dopri8'), (1, 0, 2))
+    def forward(self, x0: torch.Tensor, t_range: torch.Tensor) -> torch.Tensor:
+        self.z_pred = torch.permute(odeint_adjoint(self.ode, self.encoder(x0), t_range, adjoint_method='dopri5'), (1, 0, 2))
         self.z_dot = torch.gradient(self.z_pred, dim=1)[0]
         self.x_pred = self.decoder(self.z_pred)
         return self.x_pred
@@ -136,12 +136,12 @@ class LinearODE(torch.nn.Module):
 
 
 class LinearModelWrapper(ModelWrapper):
-    
+
     def __init__(self, real_vars: int = 29,
                  latent_vars: int = 5,
                  coder_hidden: int = 4,
                  width_list: list = [32, 16, 8],
-                 coder_activation: torch.nn.modules.activation = torch.nn.Tanh()
+                 coder_activation: torch.nn.Module = torch.nn.Tanh()
                  ):
         super().__init__(real_vars=real_vars,
                          latent_vars=latent_vars,
@@ -152,7 +152,7 @@ class LinearModelWrapper(ModelWrapper):
                          coder_activation=coder_activation)
         self.ode = LinearODE(latent_vars)
 
-    def forward(self, x0: torch.tensor, t_range: torch.tensor) -> torch.tensor:
+    def forward(self, x0: torch.Tensor, t_range: torch.Tensor) -> torch.Tensor:
         batch_size = x0.shape[0]
         t = t_range.unsqueeze(0).repeat(batch_size, 1)
         self.z_pred = self.ode(t) + self.encoder(x0).unsqueeze(1)
@@ -186,12 +186,18 @@ class PolynomialModelWrapper(ModelWrapper):
                  degree: int = 2,
                  coder_hidden: int = 4,
                  width_list: list = [32, 16, 8],
-                 coder_activation: torch.nn.modules.activation = torch.nn.Tanh()
+                 coder_activation: torch.nn.Module = torch.nn.Tanh()
                  ):
-        super().__init__(real_vars, latent_vars, 1, 1, None, coder_hidden, width_list, coder_activation)
+        super().__init__(real_vars=real_vars,
+                         latent_vars=latent_vars,
+                         ode_width=1,
+                         ode_hidden=1,
+                         coder_hidden=4,
+                         width_list=width_list,
+                         coder_activation=coder_activation)
         self.ode = PolynomialODE(degree, latent_vars)
 
-    def forward(self, x0: torch.tensor, t_range: torch.tensor) -> torch.tensor:
+    def forward(self, x0: torch.Tensor, t_range: torch.Tensor) -> torch.Tensor:
         batch_size = x0.shape[0]
         t = t_range.unsqueeze(0).repeat(batch_size, 1)
         self.z_pred = self.ode(t) + self.encoder(x0).unsqueeze(1)
